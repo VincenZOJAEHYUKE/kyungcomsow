@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Agent 차량 불량 탐지 대시보드</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  .panel{background:linear-gradient(145deg,rgba(13,35,44,.96),rgba(7,24,31,.96));border:1px solid #214451;border-radius:16px;padding:16px;box-shadow:0 12px 35px rgba(0,0,0,.18)}
+  .panel-title{display:flex;justify-content:space-between;align-items:center;font-weight:800;margin-bottom:12px;color:#d8f3f0}.chip{font-size:10px;color:#6ee7b7;border:1px solid #245f5b;border-radius:999px;padding:4px 7px;background:#062b2a}
+  .control{background:#132c35;border:1px solid #28515d;border-radius:9px;padding:9px 10px;font-size:12px;font-weight:700;color:white;cursor:pointer}.control:hover,.control.active{border-color:#10b981;background:#0b403d}.control.warning{border-color:#facc15;background:#423812;color:#fde047}
+  .metric{display:flex;flex-direction:column;background:#071a22;border:1px solid #193943;border-radius:10px;padding:8px}.metric b{font-size:16px;color:#a7f3d0}.metric span{font-size:10px;color:#647b83;margin-top:2px}
+  .pipeline-step{border:1px solid #1d3943;background:#091b22;border-radius:10px;padding:9px;display:flex;align-items:center;gap:7px;color:#667b83;font-size:11px}.pipeline-step b{width:22px;height:22px;display:grid;place-items:center;border-radius:50%;background:#102a33;color:#7f969d}.pipeline-step.active{border-color:#10b981;box-shadow:0 0 18px rgba(16,185,129,.12);color:#d1fae5}.pipeline-step.done{border-color:#397a70;color:#8ce8c9}.pipeline-step.done b{background:#0e513f;color:#a7f3d0}
+  .reason-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.reason-card{background:#071a22;border:1px solid #1b3c46;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:3px}.reason-card b{font-size:12px;color:white}.reason-card span{font-size:10px;color:#718890}.reason-icon{font-size:20px}
+  .decision{border-radius:12px;padding:12px;border:1px solid;color:white}.decision div{font-size:24px}.decision b{display:block;font-size:14px}.decision span{font-size:10px;opacity:.65}.decision.normal{border-color:#27664f;background:#07291f}.decision.repair{border-color:#6b5a25;background:#2b2410}.decision.discard{border-color:#69323a;background:#2b1117}
+  .api-row{display:flex;align-items:center;gap:8px;background:#071a22;border:1px solid #1c414b;border-radius:10px;padding:11px;margin-bottom:10px;font-size:11px;color:white}.api-row strong{color:#c4f5eb;font-size:14px}.dot{width:7px;height:7px;border-radius:50%;margin-left:auto}.dot.green{background:#34d399;box-shadow:0 0 8px #34d399}
+  .action-card{display:grid;grid-template-columns:55px 1fr 28px;gap:7px;align-items:center;padding:11px;border-radius:10px;border:1px solid;margin-top:8px;color:white}.action-card span{font-size:10px;color:#8aa0a6}.action-card em{font-style:normal;text-align:center}.action-card.success{border-color:#245c49;background:#08271f}.action-card.warning{border-color:#635323;background:#29220e}.action-card.danger{border-color:#67333b;background:#2b1117}.action-card.active{box-shadow:0 0 0 2px #10b981,0 0 24px rgba(16,185,129,.22);transform:translateY(-1px)}.action-card.success.active{box-shadow:0 0 0 2px #34d399,0 0 24px rgba(52,211,153,.22)}.action-card.warning.active{box-shadow:0 0 0 2px #facc15,0 0 24px rgba(250,204,21,.18)}.action-card.danger.active{box-shadow:0 0 0 2px #fb7185,0 0 24px rgba(251,113,133,.18)}
+  .status-badge{border-radius:12px;text-align:center;padding:14px;font-size:22px;font-weight:900;border:1px solid}.status-badge.success{color:#6ee7b7;background:#08271f;border-color:#28674f}.status-badge.warn{color:#facc15;background:#29220e;border-color:#665624}.status-badge.danger{color:#fb7185;background:#2b1117;border-color:#70343f}
+  .criteria{padding:9px 10px;border-bottom:1px solid #17323b;font-size:11px;color:white}.criteria:last-child{border-bottom:0}.criteria b{display:block;margin-bottom:2px}.criteria span{color:#80959b}
+  .agent-log{height:270px;overflow:auto;background:#041116;border:1px solid #17343e;border-radius:10px;padding:10px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px}.log-line{padding:4px 0;border-bottom:1px solid rgba(255,255,255,.025);color:#9eb3b9}.log-time{color:#53737d}.log-line.success{color:#7ee2ba}.log-line.warn{color:#f5d56d}.log-line.danger{color:#fb8b9a}.log-line.info{color:#bae6fd}
+  .haze-overlay{position:absolute;inset:0;pointer-events:none;opacity:0;display:none;background:radial-gradient(circle at 50% 45%,rgba(220,235,232,.34),rgba(150,175,170,.18) 45%,rgba(70,90,90,.08) 100%);mix-blend-mode:screen;transition:opacity .15s ease}
+  .noise-overlay{position:absolute;inset:0;pointer-events:none;opacity:0;background-image:url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%27120%27 height=%27120%27 viewBox=%270 0 120 120%27%3E%3Cfilter id=%27n%27%3E%3CfeTurbulence type=%27fractalNoise%27 baseFrequency=%27.75%27 numOctaves=%272%27 stitchTiles=%27stitch%27/%3E%3C/filter%3E%3Crect width=%27100%25%27 height=%27100%25%27 filter=%27url(%23n)%27 opacity=%27.42%27/%3E%3C/svg%3E");mix-blend-mode:screen;transition:opacity .15s ease}.noise-overlay.active{display:block}
+  .live-bbox{position:absolute;border:2px solid #a3e635;box-shadow:0 0 0 1px rgba(0,0,0,.55),0 0 18px rgba(163,230,53,.22);pointer-events:none;z-index:20;transition: all 0.1s ease;}
+  .live-bbox span{position:absolute;left:-2px;top:-25px;padding:3px 7px;border-radius:5px;background:#a3e635;color:#07110a;font-size:10px;font-weight:900;white-space:nowrap;}
+  
+  .inspection-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:16px}
+  .inspection-card{cursor:pointer;border:1px solid #334155;border-radius:12px;padding:14px;background:#0f172a;transition:.2s}
+  .inspection-card:hover,.inspection-card.active{border-color:#34d399;transform:translateY(-1px);box-shadow:0 0 0 1px #34d39955}
+  .inspection-card .count{font-size:28px;font-weight:800;margin-top:4px}
+  .inspection-card.normal .count{color:#34d399}.inspection-card.repair .count{color:#fbbf24}.inspection-card.reject .count{color:#fb7185}
+  .inspection-history{margin-top:16px;border-top:1px solid #334155;padding-top:16px}
+  .history-item{display:grid;grid-template-columns:100px 1fr;gap:14px;padding:12px;border:1px solid #334155;border-radius:10px;background:#0b1220;margin-bottom:10px;cursor:pointer}
+  .history-item:hover{border-color:#64748b}
+  .history-item img{width:100px;height:72px;object-fit:cover;border-radius:7px}
+  .history-detail{margin-top:10px;padding:12px;border-radius:10px;background:#020617;border:1px solid #334155;white-space:pre-wrap; color:white}
+</style>
+</head>
+<body class="bg-[#06141b] text-slate-100 min-h-screen p-4 md:p-6">
+<div class="max-w-[1500px] mx-auto">
+  <header class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-5">
+    <div>
+      <div class="text-xs tracking-[.25em] text-emerald-400 font-bold mb-1">AI AGENT QUALITY INSPECTION · MVP</div>
+      <h1 class="text-2xl md:text-3xl font-black">🚀 열악한 환경 극복 복합 재질 불량 탐지 AI Agent</h1>
+      <p class="text-slate-400 mt-1">카메라 스트리밍 → YOLO 객체 인지 → VLM 추론 → FastAPI 액션 → 실시간 대시보드</p>
+    </div>
+    <div class="flex items-center gap-3">
+      <div class="px-3 py-2 rounded-lg border border-emerald-700/50 bg-emerald-950/30 text-emerald-300 text-sm"><span class="inline-block w-2 h-2 rounded-full bg-emerald-400 mr-2"></span>Agent Online</div>
+    </div>
+  </header>
+
+  <div class="grid grid-cols-1 xl:grid-cols-12 gap-4">
+    <!-- LEFT: environment + perception -->
+    <section class="xl:col-span-4 space-y-4">
+      <div class="panel">
+        <div class="panel-title"><span>1. 환경 시뮬레이션</span><span class="chip">밝기 · 노이즈 재현</span></div>
+        <div class="relative rounded-xl overflow-hidden border border-slate-700 bg-black aspect-video">
+          <video id="cameraPreview" class="w-full h-full object-contain" autoplay playsinline muted></video>
+          <div class="absolute inset-0 pointer-events-none border-2 border-emerald-500/20"></div>
+          <div id="cameraNoiseOverlay" class="noise-overlay"></div>
+          <div id="cameraHazeOverlay" class="haze-overlay"></div>
+          <div id="yoloBox" class="live-bbox hidden">
+            <span id="objConf">vehicle</span>
+          </div>
+          <div class="absolute top-2 left-2 px-2 py-1 bg-black/60 rounded text-xs text-emerald-300">LIVE CAMERA</div>
+        </div>
+        <canvas id="cameraCanvas" class="hidden"></canvas>
+        <div class="grid grid-cols-2 gap-2 mt-3">
+          <button onclick="toggleAutoInspection()" id="autoBtn" class="control active">▶ 자동 검수 시작</button>
+          <button onclick="stopCamera()" id="stopBtn" class="control">■ 종료</button>
+        </div>
+        <div class="grid grid-cols-2 gap-3 mt-4">
+          <label class="text-xs text-slate-400">저조도 <span id="lowLightValue" class="text-emerald-300">0단계 · 100%</span><input id="lowLight" type="range" min="0" max="10" step="1" value="0" oninput="applyEnvironment()" class="w-full accent-emerald-500"></label>
+          <label class="text-xs text-slate-400">탁도/분진 단계 <span id="hazeValue" class="text-emerald-300">0단계 · 없음</span><input id="haze" type="range" min="0" max="3" value="0" oninput="applyEnvironment()" class="w-full"><div class="flex justify-between text-[9px] text-slate-600 mt-1"><span>없음</span><span>약함</span><span>중간</span><span>심함</span></div></label>
+        </div>
+        <div class="text-[10px] text-slate-500 mt-2">※ 선택한 환경 효과는 화면 표시뿐 아니라 AI 입력 이미지에도 동일하게 적용됩니다.</div>
+        <div id="environmentState" class="mt-3 px-3 py-2 rounded-lg border border-slate-800 bg-slate-950/60 text-xs text-slate-500">환경 상태: 정상 환경</div>
+        <p id="cameraStatus" class="text-xs text-slate-500 mt-3">스마트팩토리 자동화 모드: 시작 버튼을 누르면 객체를 실시간 추적하여 자동 캡처합니다.</p>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title"><span>2. 시각 지능 인지</span><span class="chip">YOLO · Crop</span></div>
+        <div class="relative rounded-xl overflow-hidden border border-slate-700 bg-slate-950 aspect-video flex items-center justify-center">
+          <img id="mainPreview" class="max-h-full max-w-full object-contain hidden" alt="검수 대상">
+          <div id="previewPlaceholder" class="text-slate-600 text-sm">자동 캡처된 이미지가 여기에 표시됩니다.</div>
+        </div>
+        <div class="mt-3 border-t border-slate-800 pt-3 text-xs text-slate-400">초당 지속 스트리밍을 통해 중복 캡처를 방지하고 정확한 1회 검수를 수행합니다.</div>
+      </div>
+    </section>
+
+    <!-- CENTER: reasoning -->
+    <section class="xl:col-span-5 space-y-4">
+      <div class="panel h-full">
+        <div class="panel-title"><span>3. Agent 판단 및 추론</span><span class="chip">Reasoning · VLM</span></div>
+        <div class="grid grid-cols-3 gap-2 mb-4">
+          <div id="pipe-camera" class="pipeline-step"><b>01</b><span>Camera</span></div>
+          <div id="pipe-perception" class="pipeline-step"><b>02</b><span>YOLO</span></div>
+          <div id="pipe-reasoning" class="pipeline-step"><b>03</b><span>VLM</span></div>
+          <div id="pipe-action" class="pipeline-step"><b>04</b><span>FastAPI</span></div>
+          <div id="pipe-dashboard" class="pipeline-step"><b>05</b><span>Dashboard</span></div>
+          <div class="pipeline-step"><b>06</b><span>Result</span></div>
+        </div>
+
+        <div class="reason-grid">
+          <div class="reason-card"><div class="reason-icon">🧱</div><b>재질 분석</b><span>플라스틱 · 금속 · 도장</span></div>
+          <div class="reason-card"><div class="reason-icon">🔍</div><b>결함 탐지</b><span>스크래치 · 도장 박리</span></div>
+          <div class="reason-card"><div class="reason-icon">⚠️</div><b>심각도 분석</b><span>정상 · 수리 · 폐기</span></div>
+        </div>
+
+        <div class="mt-4 grid grid-cols-3 gap-3 text-center">
+          <div class="decision normal"><div>✓</div><b>정상</b><span>재사용</span></div>
+          <div class="decision repair"><div>🔧</div><b>수리</b><span>Repair</span></div>
+          <div class="decision discard"><div>▣</div><b>폐기</b><span>Discard</span></div>
+        </div>
+
+        <div class="mt-5">
+          <div class="flex items-center justify-between mb-2"><h3 class="font-bold text-white">Agent Log</h3><span class="text-xs text-slate-500">실시간 추론 과정</span></div>
+          <div id="agentLog" class="agent-log"><div class="log-line info"><span class="log-time">[SYSTEM]</span> Agent 대시보드 준비 완료</div><div class="log-line info"><span class="log-time">[SYSTEM]</span> 자동 검수 시작 버튼을 눌러주세요.</div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- RIGHT: actions -->
+    <section class="xl:col-span-3 space-y-4">
+      <div class="panel">
+        <div class="panel-title"><span>4. 자동 도구 실행</span><span class="chip">Tool Use & Action</span></div>
+        <div class="api-row"><span>AI 호출</span><strong>FastAPI</strong><span class="dot green"></span></div>
+        <div id="actionNormal" class="action-card success"><b>정상</b><span>재사용 라인 액추에이터</span><em>✓</em></div>
+        <div id="actionRepair" class="action-card warning"><b>수리</b><span>수리 라인 액추에이터</span><em>🔧</em></div>
+        <div id="actionDiscard" class="action-card danger"><b>폐기</b><span>폐기 라인 스위치 API</span><em>■</em></div>
+        <div class="mt-3 text-xs text-slate-500">Backend가 반환한 actuator_action을 이 영역에 표시합니다.</div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title"><span>5. 대시보드 결과</span><span class="chip">UI / UX</span></div>
+        <div id="finalStatus" class="status-badge success">검수 대기</div>
+        <div class="mt-3"><div class="text-xs text-slate-500">판정 사유</div><div id="reasonShort" class="text-sm text-slate-300 mt-1">자동 검수가 진행되면 Agent 판단 사유가 기록됩니다.</div></div>
+        <div class="mt-4 grid grid-cols-2 gap-2"><div class="metric"><b id="resConfidence">-</b><span>신뢰도</span></div><div class="metric"><b id="resStatus">-</b><span>최종 판정</span></div></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title"><span>검수 완료 현황</span><span class="chip">History</span></div>
+        <div class="inspection-summary" style="grid-template-columns: repeat(3, 1fr); gap: 5px;">
+            <div class="inspection-card normal text-center p-2"><div class="text-xs text-slate-400">정상</div><div class="count text-lg" id="normalCount">0</div></div>
+            <div class="inspection-card repair text-center p-2"><div class="text-xs text-slate-400">수리</div><div class="count text-lg" id="repairCount">0</div></div>
+            <div class="inspection-card reject text-center p-2"><div class="text-xs text-slate-400">폐기</div><div class="count text-lg" id="rejectCount">0</div></div>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+let cameraStream = null;
+let isAutoRunning = false;
+let streamInterval = null;
+let pollInterval = null;
+let lastCaptureId = null;
+let inspectionHistory = [];
+
+const INSPECTION_CRITERIA = `열악한 환경 복합 재질 불량 판정 기준`;
+
+function addAgentLog(message, type = "info") {
+    const log = document.getElementById("agentLog");
+    if (!log) return;
+    const time = new Date().toLocaleTimeString("ko-KR", { hour12: false });
+    const line = document.createElement("div");
+    line.className = "log-line " + type;
+    line.innerHTML = `<span class="log-time">[${time}]</span> <span>${message}</span>`;
+    log.appendChild(line);
+    log.scrollTop = log.scrollHeight;
+    while (log.children.length > 80) log.removeChild(log.firstChild);
+}
+
+function setPipeline(step, state = "active") {
+    document.querySelectorAll(".pipeline-step").forEach(el => el.classList.remove("active", "done"));
+    const target = document.getElementById(step);
+    if (target) target.classList.add(state);
+}
+
+function applyEnvironment() {
+    const video = document.getElementById("cameraPreview");
+    const low = document.getElementById("lowLight");
+    const haze = document.getElementById("haze");
+
+    const lowLightLevel = low ? Number(low.value) : 0;
+    const brightness = Math.max(0, Math.min(100, 100 - (lowLightLevel * 10)));
+    const hazeLevel = haze ? Number(haze.value) : 0;
+
+    const blurMap = {0: 0, 1: 1.0, 2: 2.8, 3: 5.0};
+    const noiseOpacityMap = {0: 0, 1: 0.08, 2: 0.18, 3: 0.30};
+    const hazeOpacityMap = {0: 0, 1: 0.08, 2: 0.16, 3: 0.26};
+    const contrastMap = {0: 100, 1: 96, 2: 91, 3: 84};
+
+    const blur = blurMap[hazeLevel] ?? 0;
+    const noiseOpacity = noiseOpacityMap[hazeLevel] ?? 0;
+    const hazeOpacity = hazeOpacityMap[hazeLevel] ?? 0;
+    const contrast = contrastMap[hazeLevel] ?? 100;
+
+    const filter = `brightness(${brightness}%) contrast(${contrast}%) blur(${blur}px)`;
+    if (video) video.style.filter = filter;
+
+    const noise = document.getElementById("cameraNoiseOverlay");
+    const hazeOverlay = document.getElementById("cameraHazeOverlay");
+
+    if (noise) { noise.style.opacity = noiseOpacity; noise.style.display = hazeLevel > 0 ? "block" : "none"; }
+    if (hazeOverlay) { hazeOverlay.style.opacity = hazeOpacity; hazeOverlay.style.display = hazeLevel > 0 ? "block" : "none"; }
+
+    const lv = document.getElementById("lowLightValue");
+    const hv = document.getElementById("hazeValue");
+    if (lv) lv.textContent = lowLightLevel + "단계 · " + brightness + "%";
+    const hazeText = ["없음", "약함", "중간", "심함"][hazeLevel] || "없음";
+    if (hv) hv.textContent = hazeLevel + "단계 · " + hazeText;
+    
+    const state = document.getElementById("environmentState");
+    if (state) {
+        state.textContent = `환경 상태: ${lowLightLevel === 0 ? "정상 조도" : `저조도 ${lowLightLevel}단계`} · ${["정상 탁도", "탁도 약함", "탁도 중간", "탁도 심함"][hazeLevel]}`;
+    }
+}
+
+async function startCamera() {
+    try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            throw new Error("웹캠 기능을 사용할 수 없습니다.");
+        }
+        if (cameraStream) return;
+        
+        // PC 웹캠 호환성을 극대화하기 위해 까다로운 해상도 및 후면 카메라 조건 제거
+        cameraStream = await navigator.mediaDevices.getUserMedia({
+            video: true, 
+            audio: false
+        });
+        document.getElementById("cameraPreview").srcObject = cameraStream;
+        setPipeline("pipe-camera", "done");
+    } catch (error) {
+        console.error("카메라 에러:", error);
+        alert("카메라를 켤 수 없습니다. 줌(Zoom), 디스코드 등 다른 프로그램에서 카메라를 사용 중인지 확인해주세요.");
+    }
+}
+
+async function toggleAutoInspection() {
+    if (!isAutoRunning) {
+        await startCamera();
+        isAutoRunning = true;
+        document.getElementById('autoBtn').innerText = "⏸ 자동 검수 일시정지";
+        document.getElementById('autoBtn').classList.replace("active", "warning");
+
+        addAgentLog("스마트팩토리 자동 검수 라인 가동 (중복 캡처 방지 적용)", "info");
+        setPipeline("pipe-perception", "active");
+        
+        streamInterval = setInterval(streamFrameToBackend, 300);
+        pollInterval = setInterval(pollLatestResult, 1000);
+    } else {
+        isAutoRunning = false;
+        document.getElementById('autoBtn').innerText = "▶ 자동 검수 시작";
+        document.getElementById('autoBtn').classList.replace("warning", "active");
+        clearInterval(streamInterval);
+        clearInterval(pollInterval);
+        addAgentLog("자동 검수 라인이 일시정지되었습니다.", "warn");
+    }
+}
+
+function getApiBase() {
+    if (window.location.protocol === "file:") return "http://127.0.0.1:8080";
+    return window.location.protocol + "//" + window.location.hostname + ":8080";
+}
+
+async function streamFrameToBackend() {
+    const video = document.getElementById("cameraPreview");
+    if (!cameraStream || !video.videoWidth) return;
+
+    const canvas = document.getElementById("cameraCanvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    
+    ctx.filter = "none";
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    canvas.toBlob(async blob => {
+        if(!blob) return;
+        const formData = new FormData();
+        formData.append("file", blob, "stream.jpg");
+
+        try {
+            const res = await fetch(getApiBase() + "/api/frame", { method: "POST", body: formData });
+            if (!res.ok) return;
+            const data = await res.json();
+            
+            const box = document.getElementById("yoloBox");
+            if(data.bbox && box) {
+                box.style.left = (data.bbox[0] * 100) + "%";
+                box.style.top = (data.bbox[1] * 100) + "%";
+                box.style.width = ((data.bbox[2] - data.bbox[0]) * 100) + "%";
+                box.style.height = ((data.bbox[3] - data.bbox[1]) * 100) + "%";
+                box.classList.remove("hidden");
+                
+                const objConf = document.getElementById("objConf");
+                if(objConf) objConf.innerText = (data.confidence * 100).toFixed(1) + "%";
+            } else if (box) {
+                box.classList.add("hidden");
+            }
+            
+            if(data.capture_triggered) {
+                addAgentLog("신규 제품 감지! 캡처 후 중복 방지(Locked) 진입", "success");
+                setPipeline("pipe-perception", "done");
+                setPipeline("pipe-reasoning", "active");
+                document.getElementById('resStatus').innerText = "VLM 분석 중...";
+                document.getElementById('finalStatus').innerText = "분석 중...";
+                document.getElementById('finalStatus').className = "status-badge";
+            }
+        } catch(e) { }
+    }, "image/jpeg", 0.7);
+}
+
+async function pollLatestResult() {
+    try {
+        const res = await fetch(getApiBase() + "/api/result/latest");
+        const data = await res.json();
+        
+        if (data.capture_id && data.capture_id !== lastCaptureId && data.status !== "none" && data.status !== "analyzing") {
+            lastCaptureId = data.capture_id;
+            
+            let uiStatus = "정상";
+            if (data.status === "repair") uiStatus = "수리";
+            if (data.status === "discard" || data.status === "error") uiStatus = "폐기";
+            
+            const mainPreview = document.getElementById("mainPreview");
+            if (mainPreview && data.image_url) {
+                mainPreview.src = getApiBase() + data.image_url + "?t=" + new Date().getTime();
+                mainPreview.classList.remove("hidden");
+                document.getElementById("previewPlaceholder").classList.add("hidden");
+            }
+
+            renderResults({
+                status: uiStatus,
+                confidence: data.confidence,
+                reason: data.log,
+                actuator_action: data.actuator_action
+            });
+            
+            let logType = uiStatus === "폐기" ? "danger" : (uiStatus === "수리" ? "warn" : "success");
+            addAgentLog(`[판단 완료] ${uiStatus} / 액추에이터 제어: ${data.actuator_action || "없음"}`, logType);
+            
+            setPipeline("pipe-reasoning", "done");
+            setPipeline("pipe-action", "done");
+            setPipeline("pipe-dashboard", "done");
+            
+            setTimeout(() => {
+                if(isAutoRunning) setPipeline("pipe-perception", "active");
+            }, 2000);
+        }
+    } catch(e) { }
+}
+
+function renderResults(result) {
+    const statusEl = document.getElementById('resStatus');
+    statusEl.innerText = result.status;
+    
+    if (result.status === "정상") statusEl.className = "text-lg font-bold text-emerald-400";
+    else if (result.status === "수리") statusEl.className = "text-lg font-bold text-yellow-400";
+    else statusEl.className = "text-lg font-bold text-rose-400";
+
+    document.getElementById('resConfidence').innerText = result.confidence ? (result.confidence * 100).toFixed(1) + "%" : "-";
+    document.getElementById('reasonShort').innerText = result.reason || "분석 결과를 확인하세요.";
+
+    const finalStatus = document.getElementById("finalStatus");
+    if(finalStatus){
+        finalStatus.textContent = result.status;
+        finalStatus.className = "status-badge " + (result.status === "폐기" ? "danger" : result.status === "수리" ? "warn" : "success");
+    }
+
+    ["actionNormal", "actionRepair", "actionDiscard"].forEach(id => document.getElementById(id)?.classList.remove("active"));
+    if (result.status === "정상") document.getElementById("actionNormal")?.classList.add("active");
+    if (result.status === "수리") document.getElementById("actionRepair")?.classList.add("active");
+    if (result.status === "폐기") document.getElementById("actionDiscard")?.classList.add("active");
+
+    // 히스토리 카운트 증가
+    inspectionHistory.push(result.status);
+    const counts = {정상:0, 수리:0, 폐기:0};
+    inspectionHistory.forEach(s => counts[s]++);
+    document.getElementById("normalCount").textContent = counts.정상;
+    document.getElementById("repairCount").textContent = counts.수리;
+    document.getElementById("rejectCount").textContent = counts.폐기;
+}
+
+function stopCamera() {
+    isAutoRunning = false;
+    if (streamInterval) clearInterval(streamInterval);
+    if (pollInterval) clearInterval(pollInterval);
+    
+    const btn = document.getElementById('autoBtn');
+    if (btn) {
+        btn.innerText = "▶ 자동 검수 시작";
+        btn.classList.replace("warning", "active");
+    }
+
+    if (cameraStream) {
+        cameraStream.getTracks().forEach(track => track.stop());
+        cameraStream = null;
+    }
+
+    const video = document.getElementById("cameraPreview");
+    if (video) video.srcObject = null;
+    document.getElementById("yoloBox")?.classList.add("hidden");
+    addAgentLog("카메라 및 자동 검수 종료", "warn");
+}
+
+window.addEventListener('beforeunload', stopCamera);
+</script>
+</body>
+</html>
